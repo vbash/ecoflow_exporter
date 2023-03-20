@@ -213,7 +213,7 @@ class Worker:
                 except Exception as error:
                     log.error(f"Failed to parse MQTT payload: {payload} Error: {error}")
                     continue
-                self.process_payload(params)
+                self.process_payload(params, "", "")
 
             time.sleep(self.collecting_interval_seconds)
 
@@ -225,31 +225,59 @@ class Worker:
         log.debug(f"Cannot find metric linked to {ecoflow_payload_key}")
         return False
 
-    def process_payload(self, params):
+    def process_payload(self, params, prefix, postfix):
         log.debug(f"Processing params: {params}")
         for ecoflow_payload_key in params.keys():
             ecoflow_payload_value = params[ecoflow_payload_key]
             if isinstance(ecoflow_payload_value, list):
+                # log.warning(f"Skipping unsupported metric {ecoflow_payload_key}: {ecoflow_payload_value}")
+                position = 0
+                for list_item in ecoflow_payload_value:
+                    if isinstance(list_item, dict):
+                        self.process_payload(list_item, ecoflow_payload_key + "_", postfix + "_" + str(position))
+                        position = position + 1
+                        continue
+
+                    if isinstance(list_item, list):
+                        position2 = 0
+                        for list_item2 in list_item:
+                            self.process_parameter(prefix + ecoflow_payload_key + postfix + "_" + str(position) + "_" + str(position2),
+                                                   list_item2)
+                            position2 = position2 + 1
+                    else:
+                        self.process_parameter(prefix + ecoflow_payload_key + postfix + "_" + str(position), list_item)
+                    position = position + 1
+                continue
+            if isinstance(ecoflow_payload_value, dict):
+                # log.warning(f"Skipping unsupported metric {ecoflow_payload_key}: {ecoflow_payload_value}")
+                self.process_payload(ecoflow_payload_value, ecoflow_payload_key + "_", postfix)
+                continue
+            if not isinstance(ecoflow_payload_value, float | int):
                 log.warning(f"Skipping unsupported metric {ecoflow_payload_key}: {ecoflow_payload_value}")
                 continue
 
-            metric = self.get_metric_by_ecoflow_payload_key(ecoflow_payload_key)
-            if not metric:
-                try:
-                    metric = EcoflowMetric(ecoflow_payload_key, self.device_name)
-                except EcoflowMetricException as error:
-                    log.error(error)
-                    continue
-                log.info(f"Created new metric from payload key {metric.ecoflow_payload_key} -> {metric.name}")
-                self.metrics_collector.append(metric)
+            self.process_parameter(prefix + ecoflow_payload_key + postfix, ecoflow_payload_value)
 
-            metric.set(ecoflow_payload_value)
 
-            if ecoflow_payload_key == 'inv.acInVol' and ecoflow_payload_value == 0:
-                ac_in_current = self.get_metric_by_ecoflow_payload_key('inv.acInAmp')
-                if ac_in_current:
-                    log.debug("Set AC inverter input current to zero because of zero inverter voltage")
-                    ac_in_current.set(0)
+
+    def process_parameter(self, ecoflow_payload_key, ecoflow_payload_value):
+        metric = self.get_metric_by_ecoflow_payload_key(ecoflow_payload_key)
+        if not metric:
+            try:
+                metric = EcoflowMetric(ecoflow_payload_key, self.device_name)
+            except EcoflowMetricException as error:
+                log.error(error)
+
+            log.info(f"Created new metric from payload key {metric.ecoflow_payload_key} -> {metric.name}")
+            self.metrics_collector.append(metric)
+
+        metric.set(ecoflow_payload_value)
+
+        if ecoflow_payload_key == 'inv.acInVol' and ecoflow_payload_value == 0:
+            ac_in_current = self.get_metric_by_ecoflow_payload_key('inv.acInAmp')
+            if ac_in_current:
+                log.debug("Set AC inverter input current to zero because of zero inverter voltage")
+                ac_in_current.set(0)
 
 
 def main():
