@@ -6,7 +6,9 @@ An implementation of a Prometheus exporter for [EcoFlow](https://www.ecoflow.com
 
 Unlike REST API exporters, it is not required to request for `APP_KEY` and `SECRET_KEY` since MQTT credentials can be extracted from `api.ecoflow.com`. Another benefit of such implementation is that it provides much more device information:
 
+https://grafana.com/grafana/dashboards/18329
 [![Dashboard](images/EcoflowMQTT.png?raw=true)](https://grafana.com/grafana/dashboards/17812-ecoflow/)
+
 
 The project provides:
 
